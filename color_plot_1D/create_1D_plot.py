@@ -6,10 +6,14 @@ from matplotlib import ticker
 u = units()
 
 
-def create_averaged_quantities(sim, quantity):
+def create_averaged_quantities(sim, quantity, rxlim):
     file_list = sim.file_list_hdf()
     indices, time = sim.get_PNS_radius(indices=True, ret_time=True)
     time = u.convert_to_ms(time)
+    if rxlim is not None:
+        t_index = np.argmax(time > rxlim) + 1
+        indices = indices[:t_index]
+        file_list = file_list[:t_index]
     radius = u.convert_to_km(sim.cell.radius(sim.ghost))
     quantity_av = np.zeros((radius.size, time.size))
     quantity_method = getattr(sim, quantity)
@@ -42,6 +46,14 @@ def set_xlimits_labels(ax, time, right_lim):
     else:
         ax.set_xlabel(r't-t$_b$ [ms]')
         ax.set_xlim(lxlim, rxlim)
+
+def set_ylimits_labels(ax, radius, top_lim):
+    bottom_lim = radius[0]
+    if top_lim is None:
+        top_lim = radius[-1]
+    ax.set_ylim(bottom_lim, top_lim)
+    ax.set_yscale('log')
+    ax.set_ylabel('R [km]')
 
 def linspace_levels(quant, physical_zero, nvmin, nvmax):
     vmin = np.floor(np.nanmin(quant))
@@ -80,15 +92,16 @@ def logspaced_levels(quant, physical_zero, nvmin, nvmax):
     return levels, ticker.LogLocator
 
 
-def set_up_plot(sim, quantity, rxlim=None, log=False, cbar_label = None, cmap='inferno',
+def set_up_plot(sim, quantity, rxlim=None, tylim=None, log=False, cbar_label = None, cmap='inferno',
                 physical_zero=False, vmin=None, vmax=None):
-    time, quant, radius = create_averaged_quantities(sim, quantity)
+    time, quant, radius = create_averaged_quantities(sim, quantity, rxlim)
     fig = plt.figure(figsize=(12.5, 10))
     ax = fig.subplot_mosaic(
                     """A.a""",
                     width_ratios = [0.92, 0.03, 0.05],
                     gridspec_kw={'wspace': 0})
     set_xlimits_labels(ax['A'], time, rxlim)
+    set_ylimits_labels(ax['A'], radius, tylim)
     X, Y = np.meshgrid(time, radius)
 
     if log:
@@ -98,8 +111,6 @@ def set_up_plot(sim, quantity, rxlim=None, log=False, cbar_label = None, cmap='i
   
 
     pcm = ax['A'].contourf(X, Y, quant, levels=levels, locator=locator(), cmap=cmap)
-    ax['A'].set_yscale('log')
-    ax['A'].set_ylabel('R [km]')
     cbar = fig.colorbar(pcm, cax=ax["a"])
     if cbar_label is None:
         cbar.set_label(quantity)
